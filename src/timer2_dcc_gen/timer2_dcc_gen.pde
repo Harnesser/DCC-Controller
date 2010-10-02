@@ -16,6 +16,14 @@
 byte timer2_target = 100;
 unsigned int mycount = 0;
 
+byte dcc_bit_pattern[18];
+byte bits_in_frame;
+
+byte dcc_address;
+byte dcc_command;
+byte dcc_check;
+
+
 void setup() {
   
   // Setup Timer2 
@@ -27,6 +35,13 @@ void setup() {
   digitalWrite(9,LOW);
 
   sei();  // Enable interrupts
+  
+  // Messing
+  Serial.begin(9600);
+  show_bit_pattern();
+  preamble_pattern();
+  show_bit_pattern();
+  
 }
 
 
@@ -72,6 +87,29 @@ void configure_for_dcc_timing() {
 
 
 void loop(){
+
 }
 
+/* --------------------------------------------------------------
+ *  DCC Packet setup
+ * --------------------------------------------------------------
+ */
 
+void preamble_pattern() {
+  byte c_bit = 0; 
+  
+  for( byte i=0; i < 14; i++ ){
+    
+    bitClear(dcc_bit_pattern[c_bit>>3], c_bit & 7 );
+    c_bit++;
+    bitSet(dcc_bit_pattern[c_bit>>3], c_bit & 7 );
+    c_bit++;
+    
+  }
+}
+
+void show_bit_pattern(){
+  for( int i=0; i<18; i++){ 
+    Serial.println(dcc_bit_pattern[i], BIN); 
+  }
+}
