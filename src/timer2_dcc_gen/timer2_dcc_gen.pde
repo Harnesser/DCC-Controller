@@ -17,7 +17,7 @@ byte timer2_target = 100;
 unsigned int mycount = 0;
 
 byte dcc_bit_pattern[18];
-byte bits_in_frame;
+byte c_bit;
 
 byte dcc_address;
 byte dcc_command;
@@ -37,11 +37,17 @@ void setup() {
   sei();  // Enable interrupts
   
   // Messing
+  dcc_address = 3;
+  dcc_check = 5;
+  
   Serial.begin(9600);
   show_bit_pattern();
-  preamble_pattern();
+  build_frame();
   show_bit_pattern();
   
+  dcc_address = 5;
+  build_frame();
+  show_bit_pattern();
 }
 
 
@@ -95,18 +101,50 @@ void loop(){
  * --------------------------------------------------------------
  */
 
-void preamble_pattern() {
-  byte c_bit = 0; 
-  
-  for( byte i=0; i < 14; i++ ){
-    
+void bit_pattern(byte mybit){
+
     bitClear(dcc_bit_pattern[c_bit>>3], c_bit & 7 );
     c_bit++;
+    
+    if( mybit == 0 ) {
+       bitClear(dcc_bit_pattern[c_bit>>3], c_bit & 7 );
+       c_bit++;   
+    }
+    
     bitSet(dcc_bit_pattern[c_bit>>3], c_bit & 7 );
     c_bit++;
     
+    if( mybit == 0 ) {
+       bitSet(dcc_bit_pattern[c_bit>>3], c_bit & 7 );
+       c_bit++;   
+    }
+    
+}
+
+
+/* Preamble pattern, 14 '1's */
+void preamble_pattern() {
+  for( byte i=0; i < 14; i++ ){
+    bit_pattern(1);
+  } 
+}
+
+/* Address Pattern, MSB first */
+void address_pattern() {
+  for( int i=7; i>=0; i-- ) {
+    bit_pattern( byte( bitRead( dcc_address, i ) ) );
   }
 }
+
+/* Build the DCC frame */
+void build_frame() {
+  c_bit = 0;
+  preamble_pattern();
+  bit_pattern(LOW);
+  address_pattern();
+  bit_pattern(LOW);
+}
+
 
 void show_bit_pattern(){
   for( int i=0; i<18; i++){ 
