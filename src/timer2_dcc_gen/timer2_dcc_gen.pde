@@ -13,14 +13,23 @@
 #define LED1_ON() PORTB |= _BV(PIN_14)
 #define LED1_OFF() PORTB &= ~_BV(PIN_14)
 
+#define TRIG 3
+#define TRIG_ON() PORTB |= _BV(TRIG)
+#define TRIG_OFF() PORTB &= ~_BV(TRIG)
+
 #define PATTERN_BYTES 18
 
 byte timer2_target = 100;
 unsigned int mycount = 0;
 
 byte dcc_bit_pattern[PATTERN_BYTES];
+byte dcc_bit_pattern_buffered[PATTERN_BYTES];
+
 byte c_bit;
 byte dcc_bit_count_target;
+byte dcc_bit_count_target_buffered;
+
+byte c_buf;
 
 boolean valid_frame = false;
 
@@ -32,9 +41,9 @@ void setup() {
   pinMode(13,OUTPUT);
   pinMode(9,OUTPUT);
   pinMode(12,OUTPUT);
+  pinMode(11,OUTPUT);
   digitalWrite(9,LOW);
-
-  sei();  // Enable interrupts
+  digitalWrite(11,LOW);
   
   // Messing
   Serial.begin(9600);
@@ -45,14 +54,23 @@ void setup() {
   
   build_frame(5,false,2);
   show_bit_pattern();
+
+  load_new_frame();
+  c_buf = 0;  
   
+  Serial.print("Count target:");
+  Serial.println(dcc_bit_count_target, DEC);
+  
+  sei();  // Enable interrupts
 }
 
 
 ISR( TIMER2_COMPA_vect ){
-  mycount += 1;
+  TCNT2 = 0; // Reset Timer2 counter to divide...
 
-  if( (mycount & 1 ) == HIGH ) {
+  boolean bit_ = bitRead(dcc_bit_pattern_buffered[c_buf>>3], c_buf & 7 );
+
+  if( bit_ ) {
     LED_OFF();
     LED1_ON();
   } else {
@@ -60,7 +78,29 @@ ISR( TIMER2_COMPA_vect ){
     LED1_OFF();
   }  
   
-  TCNT2 = 0; // Reset Timer2 counter to divide...
+  /* Trigger for start of packet */
+/*  if(c_buf == (dcc_bit_count_target_buffered >> 1) ){
+    TRIG_OFF();
+  } else if( c_buf == dcc_bit_count_target_buffered ) {
+    TRIG_ON();  
+  }
+*/
+
+  if(c_buf == 0 ){
+    TRIG_ON();
+  } else {
+    TRIG_OFF();
+  }
+  
+  /* Now update our position */
+  if(c_buf == dcc_bit_count_target_buffered){
+    c_buf = 0;
+    load_new_frame();
+  } else {
+    c_buf++;
+  }
+   
+  //Serial.println(c_buf, DEC);
   
 };
 
@@ -201,11 +241,13 @@ void _build_frame( byte byte1, byte byte2, byte byte3) {
 };
 
 
-void load_frame(){
+void load_new_frame(){
   if( valid_frame ) {
+    Serial.println("Loading a new frame");
     for(int i=0; i<PATTERN_BYTES; i++){
       dcc_bit_pattern_buffered[i] = dcc_bit_pattern[i];
     }
+    dcc_bit_count_target_buffered = dcc_bit_count_target-1;
     valid_frame = false;
   }
 };
