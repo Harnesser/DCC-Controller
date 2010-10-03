@@ -13,16 +13,14 @@
 #define LED1_ON() PORTB |= _BV(PIN_14)
 #define LED1_OFF() PORTB &= ~_BV(PIN_14)
 
+#define PATTERN_BYTES 18
+
 byte timer2_target = 100;
 unsigned int mycount = 0;
 
-byte dcc_bit_pattern[18];
+byte dcc_bit_pattern[PATTERN_BYTES];
 byte c_bit;
-
-byte dcc_address;
-byte dcc_command;
-byte dcc_check;
-
+byte dcc_bit_count_target;
 
 void setup() {
   
@@ -37,17 +35,15 @@ void setup() {
   sei();  // Enable interrupts
   
   // Messing
-  dcc_address = 3;
-  dcc_check = 5;
-  
   Serial.begin(9600);
   show_bit_pattern();
-  build_frame();
+  
+  build_frame(3,true,2);
   show_bit_pattern();
   
-  dcc_address = 5;
-  build_frame();
+  build_frame(5,false,2);
   show_bit_pattern();
+  
 }
 
 
@@ -121,6 +117,13 @@ void bit_pattern(byte mybit){
     
 }
 
+/* DCC pattern for this byte: MSB first */
+void byte_pattern( byte mybyte ) {
+  for( int i=7; i>=0; i-- ) {
+    bit_pattern( byte( bitRead( mybyte, i ) ) );
+  } 
+};
+
 
 /* Preamble pattern, 14 '1's */
 void preamble_pattern() {
@@ -129,25 +132,61 @@ void preamble_pattern() {
   } 
 }
 
-/* Address Pattern, MSB first */
-void address_pattern() {
-  for( int i=7; i>=0; i-- ) {
-    bit_pattern( byte( bitRead( dcc_address, i ) ) );
-  }
-}
+
+/* Command Pattern */
+byte calc_command_pattern( boolean dcc_forward, byte dcc_speed ) {
+  byte command_byte;
+  command_byte = B01000000 | ( dcc_forward << 5 ) | ( dcc_speed & B00011111 );
+  return command_byte;
+};
+
+
+void show_dcc_bytes( byte command_byte, byte dcc_address, byte addr_cmd_xor ) {   
+  Serial.print("Command byte         :");
+  Serial.println(command_byte, BIN);
+  Serial.print("Address byte         :");
+  Serial.println(dcc_address, BIN);
+  Serial.print("Error Correction Byte:");
+  Serial.println(addr_cmd_xor, BIN);
+};
+
 
 /* Build the DCC frame */
-void build_frame() {
+void build_frame(byte dcc_address, boolean dcc_forward, byte dcc_speed) {
+
+  byte dcc_command = calc_command_pattern( dcc_forward, dcc_speed );
+  byte dcc_checksum = dcc_command ^ dcc_address;
+  show_dcc_bytes(dcc_command, dcc_address, dcc_checksum );
+  
+  // Build up the bit pattern for the DCC frame 
   c_bit = 0;
   preamble_pattern();
+
   bit_pattern(LOW);
-  address_pattern();
+  byte_pattern(dcc_address);
+
   bit_pattern(LOW);
-}
+  byte_pattern(dcc_command);
+
+  bit_pattern(LOW);
+  byte_pattern(dcc_checksum);
+
+  bit_pattern(HIGH);  
+  
+  dcc_bit_count_target = c_bit;
+};
+
+
+void _build_frame( byte addr, byte cmd ) {
+  
+    
+  
+  
+};
 
 
 void show_bit_pattern(){
-  for( int i=0; i<18; i++){ 
+  for( int i=0; i<PATTERN_BYTES; i++){ 
     Serial.println(dcc_bit_pattern[i], BIN); 
   }
 }
