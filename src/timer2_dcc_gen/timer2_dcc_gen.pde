@@ -22,6 +22,8 @@ byte dcc_bit_pattern[PATTERN_BYTES];
 byte c_bit;
 byte dcc_bit_count_target;
 
+boolean valid_frame = false;
+
 void setup() {
   
   // Setup Timer2 
@@ -154,34 +156,58 @@ void show_dcc_bytes( byte command_byte, byte dcc_address, byte addr_cmd_xor ) {
 /* Build the DCC frame */
 void build_frame(byte dcc_address, boolean dcc_forward, byte dcc_speed) {
 
+  valid_frame = false;
   byte dcc_command = calc_command_pattern( dcc_forward, dcc_speed );
   byte dcc_checksum = dcc_command ^ dcc_address;
   show_dcc_bytes(dcc_command, dcc_address, dcc_checksum );
   
   // Build up the bit pattern for the DCC frame 
+  _build_frame(dcc_address, dcc_command, dcc_checksum);
+ 
+  valid_frame = true;
+};
+
+void build_idle_frame(){
+  valid_frame = false;
+  _build_frame(B11111111, B00000000, B11111111);
+  valid_frame = true;
+};
+
+void build_reset_frame(){
+  valid_frame = false;
+  _build_frame(B00000000, B00000000, B00000000);
+  valid_frame = true;
+};
+
+void _build_frame( byte byte1, byte byte2, byte byte3) {
+   
+  // Build up the bit pattern for the DCC frame 
   c_bit = 0;
   preamble_pattern();
 
   bit_pattern(LOW);
-  byte_pattern(dcc_address);
+  byte_pattern(byte1);
 
   bit_pattern(LOW);
-  byte_pattern(dcc_command);
+  byte_pattern(byte2);
 
   bit_pattern(LOW);
-  byte_pattern(dcc_checksum);
+  byte_pattern(byte3);
 
   bit_pattern(HIGH);  
   
   dcc_bit_count_target = c_bit;
+  
 };
 
 
-void _build_frame( byte addr, byte cmd ) {
-  
-    
-  
-  
+void load_frame(){
+  if( valid_frame ) {
+    for(int i=0; i<PATTERN_BYTES; i++){
+      dcc_bit_pattern_buffered[i] = dcc_bit_pattern[i];
+    }
+    valid_frame = false;
+  }
 };
 
 
