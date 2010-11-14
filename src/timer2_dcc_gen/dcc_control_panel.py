@@ -77,15 +77,18 @@ class TopFrame(wx.Frame):
 	    self._dcc_command()
 	    
     def OnForward(self, evt ):
-	    self.dcc_forward = False
+	    self.dcc_forward = True
 	    self._dcc_command()
 	    
     def OnStop(self, evt):
-	    self.dcc_speed = 0
-	    self._dcc_command()
+	    self._dcc_command(stop=True)
         
-    def _dcc_command(self):
-        self.link.dcc_command(self.dcc_address, self.dcc_forward, self.dcc_speed)
+    def _dcc_command(self, stop=False):
+        if stop:
+            speed = 0
+        else:
+            speed = self.dcc_speed
+        self.link.dcc_command(self.dcc_address, self.dcc_forward, speed)
         
 if __name__ == '__main__':
     app = wx.PySimpleApp()
