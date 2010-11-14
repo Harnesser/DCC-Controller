@@ -18,6 +18,18 @@
 #define TRIG_OFF() PORTB &= ~_BV(TRIG)
 
 #define PATTERN_BYTES 18
+#define COMMAND_BYTES 7
+
+
+#define WAIT_A_STR  0
+#define WAIT_A_INT  1
+#define WAIT_SEP_1  2
+#define WAIT_DIR    3
+#define WAIT_SEP_2  4
+#define WAIT_S_STR  5
+#define WAIT_S_INT  6
+#define WAIT_TERM   7
+byte cmd_state = WAIT_A_STR;
 
 byte timer2_target = 100;
 unsigned int mycount = 0;
@@ -31,8 +43,15 @@ byte dcc_bit_count_target_buffered;
 
 byte c_buf;
 
+char dcc_address = 3;
+char dcc_speed = 3;
+boolean dcc_forward = true;
+
 boolean valid_frame = false;
 
+char in;
+boolean got_command = false;
+  
 void setup() {
   
   // Setup Timer2 
@@ -60,8 +79,8 @@ void setup() {
   
   Serial.print("Count target:");
   Serial.println(dcc_bit_count_target, DEC);
-  
   sei();  // Enable interrupts
+    
 }
 
 
@@ -131,7 +150,73 @@ void configure_for_dcc_timing() {
 
 
 void loop(){
+  
+  /* Check the serial port for a new command */
+  while( Serial.available() ) {
+    
+    in = Serial.read();
+    
+    switch(cmd_state) {
+      
+      case WAIT_A_STR:
+        if( in == 'A' || in == 'a' ) 
+          cmd_state = WAIT_A_INT;
+        break;
+        
+      case WAIT_A_INT:
+        dcc_address = int(in) - 48;
+        cmd_state = WAIT_SEP_1;
+        break;
+        
+      case WAIT_SEP_1:
+        if( in == ':' )
+          cmd_state = WAIT_DIR;
+        else
+          cmd_state = WAIT_A_STR;
+        break;
+        
+      case WAIT_DIR:
+        if( in == 'F' || in == 'f' )
+          dcc_forward = true;
+        else
+          dcc_forward = false;
+        cmd_state = WAIT_SEP_2;
+        break;
+        
+      case WAIT_SEP_2:
+        if( in == ':' )
+          cmd_state = WAIT_S_STR;
+        else
+          cmd_state = WAIT_A_STR;
+        break;  
+  
+      case WAIT_S_STR:
+        if( in == 'S' || in == 's' )
+          cmd_state = WAIT_S_INT;
+        else
+          cmd_state = WAIT_A_STR;
+        break;
+        
+      case WAIT_S_INT:
+        dcc_speed = int(in) - 48;
+        cmd_state = WAIT_A_STR;
+        got_command = true;
+        break;
+  
+    } /* END switch */
+    
+    Serial.print("State:");
+    Serial.println(cmd_state, DEC);
+    
+  } /* END serial port read... */
+  
 
+  if( got_command ) {
+    _acknowledge_command();
+    build_frame(dcc_address, dcc_forward, dcc_speed);
+    got_command = false;
+  }
+    
 }
 
 /* --------------------------------------------------------------
@@ -226,13 +311,13 @@ void _build_frame( byte byte1, byte byte2, byte byte3) {
   preamble_pattern();
 
   bit_pattern(LOW);
-  byte_pattern(byte1);
+  byte_pattern(byte1); /* Address */
 
   bit_pattern(LOW);
-  byte_pattern(byte2);
+  byte_pattern(byte2); /* Speed and direction */
 
   bit_pattern(LOW);
-  byte_pattern(byte3);
+  byte_pattern(byte3); /* Checksum */
 
   bit_pattern(HIGH);  
   
@@ -258,3 +343,19 @@ void show_bit_pattern(){
     Serial.println(dcc_bit_pattern[i], BIN); 
   }
 }
+
+void _acknowledge_command(){
+  
+  Serial.println("Command Received:");
+  Serial.print("  Address:");
+  Serial.println(dcc_address, DEC);  
+  Serial.print("  Direction: ");
+  if( dcc_forward ) {
+    Serial.println("forward");
+  } else {
+    Serial.println("reverse");
+  }
+  Serial.print("  Speed:");
+  Serial.println(dcc_speed, DEC);
+}
+  
