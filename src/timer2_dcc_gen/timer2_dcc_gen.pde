@@ -5,15 +5,11 @@
 #include <avr/io.h>
 #include <avr/interrupt.h> 
 
-#define LED_PIN 5  // digital pin #13 (portb)
-#define LED_ON() PORTB |= _BV(LED_PIN)
-#define LED_OFF() PORTB &= ~_BV(LED_PIN)
 
-#define PIN_14 4
-#define LED1_ON() PORTB |= _BV(PIN_14)
-#define LED1_OFF() PORTB &= ~_BV(PIN_14)
+#define DRIVE_1() PORTB = B00010000
+#define DRIVE_0() PORTB = B00001000
 
-#define TRIG 3
+#define TRIG 2
 #define TRIG_ON() PORTB |= _BV(TRIG)
 #define TRIG_OFF() PORTB &= ~_BV(TRIG)
 
@@ -21,17 +17,28 @@
 #define COMMAND_BYTES 7
 
 
-#define WAIT_A_STR  0
+#define WAIT_A_STR  0 /* or testmode, or timer2 delta*/
 #define WAIT_A_INT  1
+#define WAIT_A_INT_0  100
+#define WAIT_A_INT_1  101
+#define WAIT_A_INT_2  102
 #define WAIT_SEP_1  2
 #define WAIT_DIR    3
 #define WAIT_SEP_2  4
 #define WAIT_S_STR  5
 #define WAIT_S_INT  6
 #define WAIT_TERM   7
+#define WAIT_T_INT  8  /* testmode */
+#define WAIT_D_INT_0 9
+#define WAIT_D_INT_1 10
+
+#define TIMER2_TARGET 114
+
 byte cmd_state = WAIT_A_STR;
 
-byte timer2_target = 100;
+byte timer2_target = TIMER2_TARGET;
+int timer2_delta = 0;
+
 unsigned int mycount = 0;
 
 byte dcc_bit_pattern[PATTERN_BYTES];
@@ -50,6 +57,7 @@ boolean dcc_forward = true;
 boolean valid_frame = false;
 
 char in;
+
 boolean got_command = false;
   
 void setup() {
@@ -57,12 +65,11 @@ void setup() {
   // Setup Timer2 
   configure_for_dcc_timing();
   
-  pinMode(13,OUTPUT);
-  pinMode(9,OUTPUT);
-  pinMode(12,OUTPUT);
-  pinMode(11,OUTPUT);
-  digitalWrite(9,LOW);
-  digitalWrite(11,LOW);
+  pinMode(13,OUTPUT); // LED
+
+  pinMode(12,OUTPUT); // +ve
+  pinMode(11,OUTPUT); // -ve
+  pinMode(10,OUTPUT); // trigger
   
   // Messing
   Serial.begin(9600);
@@ -90,11 +97,9 @@ ISR( TIMER2_COMPA_vect ){
   boolean bit_ = bitRead(dcc_bit_pattern_buffered[c_buf>>3], c_buf & 7 );
 
   if( bit_ ) {
-    LED_OFF();
-    LED1_ON();
+    DRIVE_1();
   } else {
-    LED_ON();
-    LED1_OFF();
+    DRIVE_0();
   }  
   
   /* Trigger for start of packet */
@@ -133,8 +138,6 @@ void configure_for_dcc_timing() {
   Prescaler: set to divide-by-8 (B'010)
   Compare target: 58us / ( 1 / ( 16MHz/8) ) = 116
   */
-  
-  byte timer2_target = 114; // remember off-by-one -> count starts at 0
 
   // Set prescaler to div-by-8
   bitClear(TCCR2B, CS22);
@@ -159,13 +162,29 @@ void loop(){
     switch(cmd_state) {
       
       case WAIT_A_STR:
-        if( in == 'A' || in == 'a' ) 
-          cmd_state = WAIT_A_INT;
+        if( in == 'A' || in == 'a' ) { 
+          cmd_state = WAIT_A_INT_0;
+        } else if( in == 't' || in == 'T' ) {
+          cmd_state = WAIT_T_INT;
+        } else if( in == 'd' || in == 'D' ) {
+          cmd_state = WAIT_D_INT_0;
+        }
         break;
         
-      case WAIT_A_INT:
-        dcc_address = int(in) - 48;
-        cmd_state = WAIT_SEP_1;
+      case WAIT_A_INT_0:
+        dcc_address = 0;
+        dcc_address = (int(in) - '0') * 100;
+        cmd_state = WAIT_A_INT_1;
+        break;
+        
+      case WAIT_A_INT_1:
+        dcc_address += (int(in) - '0') * 10;
+        cmd_state = WAIT_A_INT_2;
+        break;
+        
+      case WAIT_A_INT_2:
+        dcc_address += int(in) - '0';   
+        cmd_state = WAIT_SEP_1;      
         break;
         
       case WAIT_SEP_1:
@@ -203,6 +222,30 @@ void loop(){
         got_command = true;
         break;
   
+      /* Testmode */
+      case WAIT_T_INT:
+        _write_test_frame( int(in) - 48 );
+        cmd_state = WAIT_A_STR;
+        Serial.print("Testmode");
+        Serial.println(int(in)-48, DEC);
+        break;
+      
+      /* Timer2 delta update */
+      case WAIT_D_INT_0:
+        timer2_delta = 0;
+        timer2_delta += ( int(in) - '0' ) * 10;
+        cmd_state = WAIT_D_INT_1;
+        break;
+        
+      case WAIT_D_INT_1:
+        timer2_delta += int(in) - '0';
+        cmd_state = WAIT_A_STR;
+        timer2_delta -= 20;
+        Serial.print("Target Delta:");
+        Serial.println(timer2_delta, DEC);
+        OCR2A = TIMER2_TARGET + timer2_delta;
+        break;
+        
     } /* END switch */
     
     Serial.print("State:");
@@ -343,6 +386,24 @@ void show_bit_pattern(){
     Serial.println(dcc_bit_pattern[i], BIN); 
   }
 }
+
+
+void _write_test_frame( int testtype ) {
+  char test_code;
+  
+  switch(testtype){
+    case 0: test_code = B00000000; break;
+    case 1: test_code = B11111111; break;
+  }
+  
+  for( int i=0; i < PATTERN_BYTES; i++ ){
+    dcc_bit_pattern[i] = test_code;
+  }    
+   
+  dcc_bit_count_target = 110; 
+  valid_frame = true;  
+}
+
 
 void _acknowledge_command(){
   
