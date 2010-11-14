@@ -39,15 +39,46 @@ class TopFrame(wx.Frame):
         self.dcc_speed = 5
         self.dcc_forward = True
         
+        self.link = SerialLink()
+                
         direction_panel = self._direction_widgets()
+        speed_direction = self._speed_and_direction_widgets()
         
         self.top_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.top_sizer.Add(direction_panel)
+        self.top_sizer.Add(speed_direction, flag=wx.ALIGN_CENTER)
+        self.top_sizer.Add(direction_panel, flag=wx.ALIGN_CENTER)
         
         self.SetSizer(self.top_sizer)
+        self.Fit()
         
-        self.link = SerialLink()
+    def _speed_and_direction_widgets(self):
         
+        addr_label = wx.StaticText(self, -1, "Address:")
+        
+        self.addr_entry = wx.TextCtrl(self, -1, "%d" % self.dcc_address)
+        self.Bind(wx.EVT_TEXT, self.OnAddressChange, self.addr_entry)
+        
+        speed_label = wx.StaticText(self, -1, "Speed:")
+        self.speed_entry = wx.TextCtrl(self, -1, "%d" % self.dcc_speed)
+        self.Bind(wx.EVT_TEXT, self.OnSpeedChange, self.speed_entry)
+
+        # Grid sizer for these
+        sizer = wx.GridSizer(rows=2, cols=2, hgap=5, vgap=5 )
+        label_align = wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL
+        sizer.Add(addr_label, flag=label_align)
+        sizer.Add(self.addr_entry, 0, 0)
+        sizer.Add(speed_label, flag=label_align)
+        sizer.Add(self.speed_entry, 0, 0)
+        
+        return sizer        
+
+        
+    def OnAddressChange(self, evt):
+        self.dcc_address = int( '0'+self.addr_entry.GetValue() )
+
+    def OnSpeedChange(self, evt):
+        self.dcc_speed = int( '0'+self.speed_entry.GetValue() )
+        self._dcc_command()
         
     def _direction_widgets(self):
         """ Forward, reverse and emergency stop controls"""
@@ -84,10 +115,7 @@ class TopFrame(wx.Frame):
 	    self._dcc_command(stop=True)
         
     def _dcc_command(self, stop=False):
-        if stop:
-            speed = 0
-        else:
-            speed = self.dcc_speed
+        speed = 0 if stop else self.dcc_speed
         self.link.dcc_command(self.dcc_address, self.dcc_forward, speed)
         
 if __name__ == '__main__':
