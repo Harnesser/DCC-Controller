@@ -33,7 +33,8 @@ class TopFrame(wx.Frame):
     def __init__(self, parent ):
         wx.Frame.__init__(self, parent, -1, 
             "Train Controller",
-            size=(400,400) )
+            style = wx.DEFAULT_FRAME_STYLE ^ ( 
+                wx.RESIZE_BORDER | wx.MINIMIZE_BOX | wx.MAXIMIZE_BOX ) )
                      
         self.dcc_address = 1
         self.dcc_speed = 5
@@ -47,8 +48,10 @@ class TopFrame(wx.Frame):
         self.top_sizer = wx.BoxSizer(wx.VERTICAL)
         self.top_sizer.Add(speed_direction, flag=wx.ALIGN_CENTER)
         self.top_sizer.Add(direction_panel, flag=wx.ALIGN_CENTER)
-        
         self.SetSizer(self.top_sizer)
+        
+        # Status Bar
+        self.statusbar = self.CreateStatusBar()
         self.Fit()
         
     def _speed_and_direction_widgets(self):
@@ -116,6 +119,11 @@ class TopFrame(wx.Frame):
         
     def _dcc_command(self, stop=False):
         speed = 0 if stop else self.dcc_speed
+        dir_txt = "Forward" if self.dcc_forward else "Reverse"
+        
+        txt = 'Sent: %s Address=%03d, Speed=%d' % (
+            dir_txt, self.dcc_address, speed)
+        self.statusbar.SetStatusText(txt)
         self.link.dcc_command(self.dcc_address, self.dcc_forward, speed)
         
 if __name__ == '__main__':
