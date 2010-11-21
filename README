@@ -1,0 +1,8 @@
+DCC Controller in two parts
+
+dcc_control_panel.py - Small wxPython GUI to send forward, back etc commands
+  over the serial port to the Arduino.
+  
+timer2_dcc_gen.pde - Arduino sketch to translate commands received over the
+  serial port to voltage waveforms to drive the H-bridge powering the rails.
+  
