@@ -1,0 +1,20 @@
+<H1>Arduino Firmware for DCC</H1>
+<H2>DCC Specification</H2>
+<P>Before going any further, we'd probably need to have a look at the DCC spec. DCC sends 1's and 0's as square waves of different lengths. A short square wave (58us * 2) represents a 1, and a longer one (58us * 4 or longer) is a 0.</P>
+
+<IMG SRC="dcc_waves.png">
+
+<P>These 1's and 0's are then collected into packets and transmitted on to the rails. Each packet contains (at least):
+<OL>
+    <LI>A preamble of eleven 1's</LI>
+    <LI>An address octet. This is the address of the train you want to control on the layout.</LI>
+    <LI>A command octet. This is 1 bit for direction and 7 bits for speed.</LI>
+    <LI>An error checking octet. This is the address octed XORed with the command octet</LI>
+</OL>
+</P>
+<P>If a train picks up a control packet that is not addresses to it, the command is ignored. The train keeps doing what it was last instructed to do, all the while still taking power from the rails. When nothing has to be changed, power must still be supplied to the trains so packets are still broadcast on the rails to supply power - either the previous commands can be repeated or idle packets sent.</P>
+
+
+
+
+
