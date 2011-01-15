@@ -1,19 +1,36 @@
 <H1> Controlling Model Trains with DCC and an Arduino</H1>
 
-I was back home a few months ago, and I was in the auld fella's shed. He was giving me the grand tour of the model railway setup he was building (OO guage, I believe). Dad's kinda more into the scenery, building buildings, and wiring the tracks rather than playing with the trains. But what interested me was the operation of the trains - he could have a couple of trains on the tracks and control them seperately, going at different speeds and directions. But there's only two wires! What kind of magic was this?
+<H2>‎Hear My Train a Coming</H2>
+<IMG SRC="dcc_dads_train.jpg" ALIGN=RIGHT>
+<P>I was back home a few months ago, and I was in the auld fella's shed. He was giving me the grand tour of the model railway setup he was building (OO guage, I believe). Dad's kinda more into the scenery, building buildings, and wiring the tracks rather than playing with the trains. But what interested me was the operation of the trains - he could have a couple of trains on the tracks and control them seperately, going at different speeds and directions. But there's only two wires! What kind of magic was this?</P>
 
-Turns out it was Digital Command Control, or DCC. 
+<P>Turns out it was Digital Command Control, or DCC. </P>
 
 <H2>The Golden Age of Steam</H2>
-Back in olden times, the motors onboard model trains got their power (either AC or DC) from the tracks that the train ran on. This was cool if you had only the one train, you could control its speed by varying the voltage on the tracks, and if you had a DC setup, its direction by flipping the polarity. But if you wanted to run two or more trains at the same time on the same tracks, they'd go at the same speed in the same direction. Not too realistic. Or fun, I can imagine.
+<P>Back in olden times, the motors onboard model trains got their power (either AC or DC) from the tracks that the train ran on. This was cool if you had only the one train, you could control its speed by varying the voltage on the tracks, and if you had a DC setup, its direction by flipping the polarity. But if you wanted to run two or more trains at the same time on the same tracks, they'd go at the same speed in the same direction. Not too realistic. Or fun, I can imagine.</P>
 
-That's unless you split up the track layout into seperate zones electrically. So a train on zone 1 say, would go at a different speed from a train on zone 2. This setup worked but was very flakey in a number of dimensions. It was especially troublesome at the boundaries between these sections, usually at the points. Points, if you don't know, are those things on a railway which direct a train onto on branch of a track or the other. In model railway land, with the tracks being electrically conductive and all, the points are essentially switches which can end up shorting the zones if things are not properly controlled. I'm a bit fuzzy on the details here to be honest, so I'll continue...
+<P>That's unless you split up the track layout into seperate zones electrically. So a train on zone 1 say, would go at a different speed from a train on zone 2. This setup worked but was very flakey in a number of dimensions. It was especially troublesome at the boundaries between these sections, usually at the points. Points, if you don't know, are those things on a railway which direct a train onto one branch of a track or the other. In model railway land, with the tracks being electrically conductive and all, the points are essentially DPDT switches which can end up shorting the zones if things are not properly controlled. I'm a bit fuzzy on the details here to be honest, so I'll continue...</P>
 
 <H2>DCC</H2>
-Anyways, DCC is the solution to all this. It's quite cool. Instead of DC or a sinewave on the rails, you drive a digital control packet at roughly +-15V. The motor on the train takes its power from this DCC signal (recifies it, I think), and a chip onboard each train decodes the control packet to control the direction and speed of the train. Since each DCC train can be programmed with an address, each train on a layout can be individually addressed and controlled all without tricky zone wiring! Brill! For a train that's not being addressed, it can still rectify the signals on the rails to power its motor. And if its not being addressed, the train keeps doing what it's doing.
+<P>Anyways, DCC is the solution to all this. It's quite cool. Instead of DC or a sinewave on the rails, you drive a digital control packet at roughly +-15V. The motor on the train takes its power from this DCC signal (recifies it, I think), and a chip onboard each train decodes the control packet to set the direction and speed of the train. Since each DCC train can be programmed with an address, each train on a layout can be individually addressed and controlled all without tricky zone wiring! Brill! For a train that's not being addressed, it can still rectify the signals on the rails to power its motor. And if its not being addressed, the train keeps doing what it's doing.</P>
  
 <H2>I had a spare Arduino</H2>
-This was very interesting to me. Digital control, eh? I had a spare Arduino - I'd brought my RGB LED project to show the nephew/nieces. A plan was forming. Could I possibly use the Arduino to digitally control my dad's trains?
+<P>This was very interesting to me. Digital control, eh? I had a spare Arduino - I'd brought my RGB LED project to show the nephew/nieces. Digital Control. A spare Arduino. A plan was forming. Could I possibly program my Arduino to digitally control my dad's trains?</P>
+
+<H2>Power</H2>
+<P>The first problem was electrical. The Arduino pumps out 5V, and the trains would require a swing of ideally ±15V and quite a bit of current. So I was thinking MOSFET H-Bridge switching a hefty power supply and controlled by the Arduino's outputs. But I had no MOSFETs to hand. Luckily, my dad had a few <A HREF="http://www.datasheetcatalog.com/datasheets_pdf/L/2/9/3/L293D.shtml">L293D</A>'s lying about (he's cool like that). So with a bit of stripboard and a chopped up DIL socket I had a quick and dirty power driver circuit ready to go. A dusty wall wart rated for 12V DC (giving me ±6V) sourced from the bottom drawer in my dad's shed would supply the necessary power. The general idea of the circuit is shown below:
+</P>
+<IMG SRC="dcc_driver_circuit.png">
+
+<P>I used two of the four H-Bridge legs in the L293D to steer the 12V across the tracks. By controlling inputs 1A and 2A carefully, I could put +12V on one rail and 0V on the other, and vice versa, giving a swing of ±6V. This is not exactly to spec, but seemed to work for two trains at least.</P>
+
+<H2>The Grand Plan</H2>
+<P>Now that I was happy with the physics, it was time to get metaphysical. The basic DCC spec defines a packet made up of the train address, its direction and its speed. So I thought it would be nice if I could send an address:direction:speed triplet from a computer GUI to the Arduino via the USB/serial port. My firmware on the Arduino would then convert this command triplet string into voltage waveforms on its output pins, that would drive the power H-Bridge made from the L293D to, in turn, control the train.</P>
+<P>So that's what I did. Although I didn't get it completed at home, so the auld fella tacked a few sections of track onto a length of 2x1 and let me borrow a train.</P>
+<IMG SRC="dcc_system_setup.png">
+
+<H2>Firmware</H2>
+<P>The firmware to implement the basic DCC spec is interesting enough and would make an interesting post on its own. So that's what I'll do.</P>
 
 
 
