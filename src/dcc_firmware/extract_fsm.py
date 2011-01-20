@@ -8,7 +8,7 @@ import subprocess
 fsm = {}
 state_var = 'DUMMY_STATE' # stops it match stuff before the initial switch statement
 
-hPDE = open('timer2_dcc_gen.pde', 'r')
+hPDE = open('dcc_firmware.pde', 'r')
 cur_state = ''
 
 for line in hPDE:
@@ -60,5 +60,5 @@ hDOT = open('fsm.dot','w')
 hDOT.write(dot.replace('%conns%', '\n'.join(conns) ))
 hDOT.close()
 
-#subprocess.Popen(['dot'
+subprocess.Popen(['dot', 'fsm.dot' , '-Tsvg', '-o', 'fsm.svg'])
 

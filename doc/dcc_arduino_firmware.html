@@ -1,15 +1,15 @@
 <H1>Arduino Firmware for a DCC Model Train Controller</H1>
 
 <H2>Firmware</H2>
-So now that I had assembled the <A HREF="">hardware</A>, it was firmware time. I wanted to send an address:direction:speed string (eg "A001:F:S3") over the serial connect to the Arduino, and have the Arduino build the corresponding DCC packet. The Arduino would then drive the H-Bridge accordingly.
-
+So now that I had assembled the <A HREF="">hardware</A>, it was firmware time. I wanted to send an address:direction:speed string (eg "A001:F:S3") over the serial connection to the Arduino, and have the Arduino build the corresponding DCC packet and drive the H-Bridge accordingly.
+<P>
 The Arduino firmware I wrote to implement the DCC spec is interesting from two respects: it uses timer interrupts and it writes to the microcontroller ports directly. But I'm getting ahead of myself a little...
 
 <H2>DCC Specification</H2>
-Before going any further, we'd probably need to have a look at the DCC <A HREF="http://www.nmra.org/standards/DCC/standards_rps/DCCStds.html">spec</A>. DCC sends 1's and 0's as square waves of different lengths. A short square wave (58us * 2) represents a 1, and a longer one (>95us) is a 0.
-
-<IMG SRC="dcc_signals.png">
-
+Before going any further, we'd probably need to have a look at the DCC <A HREF="http://www.nmra.org/standards/DCC/standards_rps/DCCStds.html">spec</A>. DCC sends 1's and 0's as square waves of different lengths. A short square wave (58us * 2) represents a 1, and a longer one (>95us * 2) is a 0.
+<P>
+<IMG SRC="images/dcc_signal.png">
+<P>
 These 1's and 0's are then collected into packets and transmitted on to the rails. Each packet contains (at least):
 <OL>
     <LI>A preamble of eleven 1's</LI>
@@ -18,11 +18,11 @@ These 1's and 0's are then collected into packets and transmitted on to the rail
     <LI>An error checking octet. This is the address octed XORed with the command octet</LI>
 </OL>
 Each of these sections is separated by a "0" and the packet ends with a "1" bit.
-If a train picks up a control packet that is not addresses to it, the command is ignored. The train keeps doing what it was last instructed to do, all the while still taking power from the rails. When nothing has to be changed, power must still be supplied to the trains so packets are still broadcast on the rails to supply power - either the previous commands can be repeated or idle packets sent.
+If a train picks up a control packet that is not addresses to it, the command is ignored - the train keeps doing what it was last instructed to do, all the while still taking power from the rails. When nothing has to be changed, power must still be supplied to the trains so packets are still broadcast on the rails to supply power. In this case either the previous commands can be repeated or idle packets sent.
 
 <H2>Driving the H-Bridge</H2>
-First, I had to figure out a way of driving the H-Bridge signals. To avoid shorting out the supply rails, I have to drive the H-Bridge control signals differentially - both must change at the same time. This ruled out using <CODE>digital_write()</CODE> to set pin states for two reasons: it can only change one pin at a time; and it's <A HREF="http://www.billporter.info/ready-set-oscillate-the-fastest-way-to-change-arduino-pins/">too slow</A>.
-
+First, I had to figure out a way of driving the H-Bridge signals. Driving both legs of the H-Bridge incorrectly won't short out the power supply, but it will give ugly transistions on the rails ( <IMG SRC="images/dcc_sparkline_bad.png"> instead of <IMG SRC="images/dcc_sparkline_good.png">) and DCC decoders may not be able to decode the packet. The H-Bridge control signals should be driven differentially - both must change at the same time. This ruled out using <CODE>digital_write()</CODE> to set pin states for two reasons: it can only change one pin at a time; and it's <A HREF="http://www.billporter.info/ready-set-oscillate-the-fastest-way-to-change-arduino-pins/">too slow</A>.
+<P>
 So I needed to directly manipulate the a microcontroller digital port. I chose pins 11 and 12 which are both in <A HREF="http://arduino.cc/en/Reference/Atmega168Hardware">PORTB</A>. By <A HREF="http://arduino.cc/en/Reference/PortManipulation">directly manipulating</A> PORTB with a macro, I could now change the pins at the same instant in time.
 
 <PRE>
@@ -30,11 +30,11 @@ So I needed to directly manipulate the a microcontroller digital port. I chose p
 #define DRIVE_1() PORTB = B00010000
 #define DRIVE_0() PORTB = B00001000
 </PRE>
-
+<P>
 When to use these macros was the next problem.
 
 <H2>Timing</H2>
-As the DCC spec specifies quite a tight timing requirement on the 1 and 0 waveforms, I decided I should use the timer on the Arduino's microcontroller. Using the timer, I could place the transistions on the outputs accurately. So I set up the timer so that the interrupt would trigger every 58us. To simplify things, I defined the time of a 0 bit to be twice that of the 1 bit, ie 116us between transitions.
+As the DCC spec specifies quite a tight timing requirement on the 1 and 0 waveforms, I decided I should use the timer on the Arduino's microcontroller. Using the timer, I could place the transistions on the outputs accurately. So I set up the timer so that the interrupt would trigger every 58us. To simplify things, I defined the time of a 0 bit to be twice that of the 1 bit, ie 116us between transitions. For example, if I wanted to send a <CODE>1</CODE>, I would drive <CODE>LO HI</CODE>, and I'd drive <CODE>LO LO HI HI</CODE> to transmit a <CODE>0</CODE>. The timer setup routine is shown below.
 
 <PRE>void configure_for_dcc_timing() {
 
@@ -60,7 +60,7 @@ As the DCC spec specifies quite a tight timing requirement on the 1 and 0 wavefo
 }
 </PRE>
 
-I'd have other things to do in the timer interrupt routine, so it was important to zero the counter and toggle the output pins straight away to keep the timing accurate.
+The interupt service routine (ISR) for the timer is shown below. For accurate timing when using a count target for a timer, I have to reset the timer counter straight away. Straight after, I figure out which level I need to drive and drive it. The point is, there's a fixed amount of processor cycles needed from when the ISR fires until I drive the pins. After this, I can be a little more relaxed about anything else I need to do during the ISR, like update the pattern count or load a new frame (explained later).
 
 <PRE>
 #include <avr/interrupt.h> 
@@ -78,17 +78,119 @@ ISR( TIMER2_COMPA_vect ){
     DRIVE_0();
   }  
   
-  ... other stuff ...
+  /* Now update our position */
+  if(c_buf == dcc_bit_count_target_buffered){
+    c_buf = 0;
+    load_new_frame();
+  } else {
+    c_buf++;
+  }
+
 };
 </PRE>
 
 <H2>Building Control Packets</H2>
-I wanted the ISR for the timer to be as short as possible. Now that I'd settled on transmitting a "0" twice as slow as a "1", the packet size in Unit Intervals (UIs, ie 58us) were going to be different depending on the data transmitted. 
+There are two steps to getting packet UI data ready for transmission. First, the UI pattern must be constructed using the latest address, speed and direction data that the firmware has recieved from the serial link. And then when the driver interrupt is ready for it, the packet is copied to a buffer area so that output data is never updated mid way through the transmission of a packet. The picture below gives the general idea:
+<P>
+<IMG SRC="images/dcc_driver_data_flow.png">
+<P>
+To keep things simple for the interrupt routine, I built a list of highs and lows that must be transmitted for a given packet. Now, each time the ISR fires it just outputs the next level in the list. For example, if I wanted to drive a packet of <CODE>1001</CODE>, I'd actually be driving 12 UIs (<CODE>LO HI, LO LO HI HI, LO LO HI HI, LO HI</CODE>) on the pins. So I set up an array of <CODE>byte</CODE>s called <CODE>dcc_bit_pattern</CODE> to hold this <CODE>HI LO HI ...</CODE> sequence. It was sized so that it would hold the worst case packet length, transmitting all <CODE>0</CODE>'s.
+<P>
+So after recieving a new direction instruction, I'd determine the frame data and write it to this packet buffer in UI format. All the while, I'd be keeping a count of the number of UIs in the packet, and when I'd finished building the packet, squirrel this final UI count away for use later. To build a packet from the address, speed and direction data, I call <CODE>build_packet()</CODE>, which in turn calls a general-purpose packet builder function called <CODE>_build_packet()</CODE>, shown next:
 
+<PRE>void _build_frame( byte byte1, byte byte2, byte byte3) {
+   
+  // Build up the bit pattern for the DCC frame 
+  c_bit = 0;
+  preamble_pattern();
 
-<H2>Reading Control Strings vi Serial I/O</H2>
-State machine to expect: "A", digit, digit, digit, "F" or "B", "S", digit, digit
+  bit_pattern(LOW);
+  byte_pattern(byte1); /* Address */
 
+  bit_pattern(LOW);
+  byte_pattern(byte2); /* Speed and direction */
+
+  bit_pattern(LOW);
+  byte_pattern(byte3); /* Checksum */
+
+  bit_pattern(HIGH);  
+  
+  dcc_bit_count_target = c_bit;
+  
+};
+</PRE>
+
+The <CODE>byte_pattern()</CODE> function takes a byte and converts it to a string of UIs. For example, given an address of <CODE>12</CODE>, this is <CODE>b0000_1010</CODE> in binary and the <CODE>byte_pattern()</CODE> function would add the UIs <CODE>{LO LO HI HI, LO LO HI HI, LO LO HI HI, LO LO HI HI, LO HI, LO LO HI HI, LO HI, LO LO HI HI}</CODE> to the current packet being constructed.
+<P>
+The function <CODE>byte_pattern()</CODE> uses <CODE>bit_pattern()</CODE> which really does all the donkey work, doing the actual logic-to-UI conversion.  Starting at position held in variable <CODE>c_bit</CODE>, <CODE>bit_pattern()</CODE> will lay down <CODE>LO HI</CODE> or <CODE>LO LO HI HI</CODE> for each bit and will increment the UI counter <CODE>c_bit</CODE> as it goes.
+
+<PRE>void bit_pattern(byte mybit){
+
+    bitClear(dcc_bit_pattern[c_bit>>3], c_bit & 7 );
+    c_bit++;
+    
+    if( mybit == 0 ) {
+       bitClear(dcc_bit_pattern[c_bit>>3], c_bit & 7 );
+       c_bit++;   
+    }
+    
+    bitSet(dcc_bit_pattern[c_bit>>3], c_bit & 7 );
+    c_bit++;
+    
+    if( mybit == 0 ) {
+       bitSet(dcc_bit_pattern[c_bit>>3], c_bit & 7 );
+       c_bit++;   
+    }
+    
+}
+</PRE>
+
+The position of a given UI in the packet's <CODE>byte</CODE> array <CODE>dcc_bit_pattern</CODE> is decoded from the UI counter. The three LSBs, <CODE>c_bit[2:0]</CODE> is the position within the byte and the remaining LSBs is the <CODE>byte</CODE> address. This explains the <CODE>bitClear(dcc_bit_pattern[c_bit>>3], c_bit & 7 )</CODE> stuff that's going on both here and in the ISR.
+
+<P>
+When the packet is built and the driver interrupt is ready for it, the packet is copied to a buffer area so that a transmitted packet is never updated mid way through being updated. The function <CODE>load_new_packet()</CODE> takes care of copying the new UI data and updating the buffered UI target count.
+
+<H2>Reading Control Strings via Serial I/O</H2>
+To read a control string from the serial port, I've used the <CODE>Serial</CODE> module and a finite state machine (FSM). The FSM detects a string in the form: <CODE>"A" digit digit digit ":" "F" or "B" ":" "S" digit</CODE>. If there's a handier way to do this, I'm all ears. The FSM diagram for this is shown below, with the red transitions being the main loop, and the dashed transistions being followed when there's an error. I snuck a few testmodes in there too: one so I could drive the rails constantly long enough to put a multimeter on them; and another to tweak the timer target count.
+<P>
+<IMG SRC="images/dcc_serial_fsm.png">
+<P>
+Having the firware controlled by strings passed through the serial port opens up some interesting capabilities. For instance, I didn't know the address of the train initially, so I wrote small Python script to cycle through all the addresses and wait a while to see if the train responded (it turned out to be '1'):
+<PRE>#! /usr/bin/env python
+""" Try to find the address of dad's train... """
+
+from time import sleep
+
+import serial
+
+link = serial.Serial('/dev/ttyUSB0', baudrate=9600, timeout=2)
+
+def search_address():
+	for address in range(127):
+		print "Address %03d" % (address)
+		link.write("A%03d:F:S3" % address )
+		sleep(10)
+	
+if __name__ == '__main__':
+	search_address()
+</PRE>
+
+I also wrote one to move the train back and forth along the track:
+<PRE>#! /usr/bin/env python
+from time import sleep
+import serial
+
+link = serial.Serial('/dev/ttyUSB0', baudrate=9600, timeout=2)
+print "Link:", link
+for i in xrange(10):
+    link.write("A001:F:S5")
+    sleep(10)
+    link.write("A001:B:S6")
+    sleep(14)
+</PRE>
+
+<H2>The Grand Opening</H2>
+So after all this, you might be interested in what my dad thought of the whole endeavour. I took it back home and showed him, and he was like "Meh, that's nice I suppose. I'm more interested in the wireless control that's about these days...". Fair play, no point in using old tech, I suppose!
 
 <H2>References</H2>
 <UL>
