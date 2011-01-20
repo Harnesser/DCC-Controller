@@ -34,9 +34,9 @@
      id="namedview2405"
      showgrid="true"
      inkscape:snap-global="true"
-     inkscape:zoom="0.35355339"
-     inkscape:cx="4407.4629"
-     inkscape:cy="2517.8092"
+     inkscape:zoom="0.5"
+     inkscape:cx="3780.4435"
+     inkscape:cy="2609.767"
      inkscape:window-x="85"
      inkscape:window-y="2"
      inkscape:window-maximized="0"
@@ -9731,7 +9731,10 @@
   <g
      transform="translate(2664.0008,632.9352)"
      class="graph"
-     id="graph0">
+     id="graph0"
+     inkscape:export-filename="/home/marty/projects/railways/doc/images/inkscape/dcc_serial_fsm.png"
+     inkscape:export-xdpi="90"
+     inkscape:export-ydpi="90">
     <title
        id="title8258">DDC_IO_FSM</title>
     <!-- WAIT_SEP_1 -->
@@ -10291,7 +10294,7 @@
   <rect
      inkscape:export-ydpi="90"
      inkscape:export-xdpi="90"
-     inkscape:export-filename="/home/marty/projects/railways/doc/images/inkscape/dcc_driver_circuit.png"
+     inkscape:export-filename="/home/marty/projects/railways/doc/images/inkscape/dcc_serial_fsm.png"
      y="628.73529"
      x="3268.801"
      height="11.200004"
@@ -10301,7 +10304,7 @@
   <rect
      inkscape:export-ydpi="90"
      inkscape:export-xdpi="90"
-     inkscape:export-filename="/home/marty/projects/railways/doc/images/inkscape/dcc_driver_circuit.png"
+     inkscape:export-filename="/home/marty/projects/railways/doc/images/inkscape/dcc_serial_fsm.png"
      y="20.735126"
      x="2660.8008"
      height="11.200004"
