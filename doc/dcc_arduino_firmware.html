@@ -21,12 +21,12 @@ Each of these sections is separated by a "0" and the packet ends with a "1" bit.
 If a train picks up a control packet that is not addresses to it, the command is ignored - the train keeps doing what it was last instructed to do, all the while still taking power from the rails. When nothing has to be changed, power must still be supplied to the trains so packets are still broadcast on the rails to supply power. In this case either the previous commands can be repeated or idle packets sent.
 
 <H2>Driving the H-Bridge</H2>
-First, I had to figure out a way of driving the H-Bridge signals. Driving both legs of the H-Bridge incorrectly won't short out the power supply, but it will give ugly transistions on the rails ( <IMG SRC="images/dcc_sparkline_bad.png"> instead of <IMG SRC="images/dcc_sparkline_good.png">) and DCC decoders may not be able to decode the packet. The H-Bridge control signals should be driven differentially - both must change at the same time. This ruled out using <CODE>digital_write()</CODE> to set pin states for two reasons: it can only change one pin at a time; and it's <A HREF="http://www.billporter.info/ready-set-oscillate-the-fastest-way-to-change-arduino-pins/">too slow</A>.
+First, I had to figure out a way of driving the H-Bridge signals. Driving both legs of the H-Bridge incorrectly won't short out the power supply, but it will give ugly transitions on the rails ( <IMG SRC="images/dcc_sparkline_bad.png"> instead of <IMG SRC="images/dcc_sparkline_good.png">) and DCC decoders may not be able to decode the packet. The H-Bridge control signals should be driven differentially - both must change at the same time. This ruled out using <CODE>digital_write()</CODE> to set pin states for two reasons: it can only change one pin at a time; and it's <A HREF="http://www.billporter.info/ready-set-oscillate-the-fastest-way-to-change-arduino-pins/">too slow</A>.
 <P>
 So I needed to directly manipulate the a microcontroller digital port. I chose pins 11 and 12 which are both in <A HREF="http://arduino.cc/en/Reference/Atmega168Hardware">PORTB</A>. By <A HREF="http://arduino.cc/en/Reference/PortManipulation">directly manipulating</A> PORTB with a macro, I could now change the pins at the same instant in time.
 
 <PRE>
-#include <avr/io.h>
+#include &lt;avr/io.h&gt;
 #define DRIVE_1() PORTB = B00010000
 #define DRIVE_0() PORTB = B00001000
 </PRE>
@@ -34,7 +34,7 @@ So I needed to directly manipulate the a microcontroller digital port. I chose p
 When to use these macros was the next problem.
 
 <H2>Timing</H2>
-As the DCC spec specifies quite a tight timing requirement on the 1 and 0 waveforms, I decided I should use the timer on the Arduino's microcontroller. Using the timer, I could place the transistions on the outputs accurately. So I set up the timer so that the interrupt would trigger every 58us. To simplify things, I defined the time of a 0 bit to be twice that of the 1 bit, ie 116us between transitions. For example, if I wanted to send a <CODE>1</CODE>, I would drive <CODE>LO HI</CODE>, and I'd drive <CODE>LO LO HI HI</CODE> to transmit a <CODE>0</CODE>. The timer setup routine is shown below.
+As the DCC spec specifies quite a tight timing requirement on the 1 and 0 waveforms, I decided I should use the timer on the Arduino's microcontroller. Using the timer, I could place the transitions on the outputs accurately. So I set up the timer so that the interrupt would trigger every 58us. To simplify things, I defined the time of a 0 bit to be twice that of the 1 bit, ie 116us between transitions. For example, if I wanted to send a <CODE>1</CODE>, I would drive <CODE>LO HI</CODE>, and I'd drive <CODE>LO LO HI HI</CODE> to transmit a <CODE>0</CODE>. The timer setup routine is shown below.
 
 <PRE>void configure_for_dcc_timing() {
 
@@ -60,10 +60,10 @@ As the DCC spec specifies quite a tight timing requirement on the 1 and 0 wavefo
 }
 </PRE>
 
-The interupt service routine (ISR) for the timer is shown below. For accurate timing when using a count target for a timer, I have to reset the timer counter straight away. Straight after, I figure out which level I need to drive and drive it. The point is, there's a fixed amount of processor cycles needed from when the ISR fires until I drive the pins. After this, I can be a little more relaxed about anything else I need to do during the ISR, like update the pattern count or load a new frame (explained later).
+The interrupt service routine (ISR) for the timer is shown below. For accurate timing when using a count target for a timer, I have to reset the timer counter straight away. Straight after, I figure out which level I need to drive and drive it. The point is, there's a fixed amount of processor cycles needed from when the ISR fires until I drive the pins. After this, I can be a little more relaxed about anything else I need to do during the ISR, like update the pattern count or load a new frame (explained later).
 
 <PRE>
-#include <avr/interrupt.h> 
+#include &lt;avr/interrupt.h&gt;
 
 ...
 
@@ -90,13 +90,13 @@ ISR( TIMER2_COMPA_vect ){
 </PRE>
 
 <H2>Building Control Packets</H2>
-There are two steps to getting packet UI data ready for transmission. First, the UI pattern must be constructed using the latest address, speed and direction data that the firmware has recieved from the serial link. And then when the driver interrupt is ready for it, the packet is copied to a buffer area so that output data is never updated mid way through the transmission of a packet. The picture below gives the general idea:
+There are two steps to getting packet UI data ready for transmission. First, the UI pattern must be constructed using the latest address, speed and direction data that the firmware has received from the serial link. And then when the driver interrupt is ready for it, the packet is copied to a buffer area so that output data is never updated mid way through the transmission of a packet. The picture below gives the general idea:
 <P>
 <IMG SRC="images/dcc_driver_data_flow.png">
 <P>
 To keep things simple for the interrupt routine, I built a list of highs and lows that must be transmitted for a given packet. Now, each time the ISR fires it just outputs the next level in the list. For example, if I wanted to drive a packet of <CODE>1001</CODE>, I'd actually be driving 12 UIs (<CODE>LO HI, LO LO HI HI, LO LO HI HI, LO HI</CODE>) on the pins. So I set up an array of <CODE>byte</CODE>s called <CODE>dcc_bit_pattern</CODE> to hold this <CODE>HI LO HI ...</CODE> sequence. It was sized so that it would hold the worst case packet length, transmitting all <CODE>0</CODE>'s.
 <P>
-So after recieving a new direction instruction, I'd determine the frame data and write it to this packet buffer in UI format. All the while, I'd be keeping a count of the number of UIs in the packet, and when I'd finished building the packet, squirrel this final UI count away for use later. To build a packet from the address, speed and direction data, I call <CODE>build_packet()</CODE>, which in turn calls a general-purpose packet builder function called <CODE>_build_packet()</CODE>, shown next:
+So after receiving a new direction instruction, I'd determine the frame data and write it to this packet buffer in UI format. All the while, I'd be keeping a count of the number of UIs in the packet, and when I'd finished building the packet, squirrel this final UI count away for use later. To build a packet from the address, speed and direction data, I call <CODE>build_packet()</CODE>, which in turn calls a general-purpose packet builder function called <CODE>_build_packet()</CODE>, shown next:
 
 <PRE>void _build_frame( byte byte1, byte byte2, byte byte3) {
    
