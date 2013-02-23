@@ -370,10 +370,13 @@ void _build_frame( byte byte1, byte byte2, byte byte3) {
   
 };
 
-
+/**
+ * This function is called from within the interrupt handler
+ * so it cannot use Serial.print functions without failing.
+ */
 void load_new_frame(){
   if( valid_frame ) {
-    Serial.println("Loading a new frame");
+    //Serial.println("Loading a new frame");
     for(int i=0; i<PATTERN_BYTES; i++){
       dcc_bit_pattern_buffered[i] = dcc_bit_pattern[i];
     }
